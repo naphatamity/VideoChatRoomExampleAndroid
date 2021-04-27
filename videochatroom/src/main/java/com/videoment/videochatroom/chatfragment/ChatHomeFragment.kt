@@ -27,7 +27,6 @@ import io.reactivex.disposables.Disposable
 import io.reactivex.schedulers.Schedulers
 
 class ChatHomeFragment() : Fragment(R.layout.chat_list), ListListener {
-    private var parentID = ""
     private var channelID = ""
     lateinit var chatAdapter: ChatAdapter
     private lateinit var messageQuery: Disposable
@@ -35,6 +34,7 @@ class ChatHomeFragment() : Fragment(R.layout.chat_list), ListListener {
 
     companion object {
         const val CHANNEL_ID_ARG_KEY = "channelID"
+        const val PROFILE_IMAGE = "profileImage"
         const val HIDE_KEY_BOARD = 0
     }
 
@@ -65,9 +65,9 @@ class ChatHomeFragment() : Fragment(R.layout.chat_list), ListListener {
                     chatAdapter.submitList(it).run {
                         view?.findViewById<RecyclerView>(R.id.content_recycler)
                             ?.scrollToPosition(it.size - 1)
+                        requireView().findViewById<Button>(R.id.bottomBtn).visibility = View.VISIBLE
                     }
                 } else {
-                    requireView().findViewById<Button>(R.id.bottomBtn).visibility = View.VISIBLE
                     chatAdapter.submitList(it)
                 }
             }
@@ -137,7 +137,7 @@ class ChatHomeFragment() : Fragment(R.layout.chat_list), ListListener {
     private fun addProfileImage() {
         val profileImage = requireActivity().findViewById<ImageView>(R.id.profileDarkImageView)
         val sharedPref = requireActivity().getPreferences(Context.MODE_PRIVATE) ?: return
-        val profileUrl = sharedPref.getString("profileImage", null)
+        val profileUrl = sharedPref.getString(PROFILE_IMAGE, null)
 
         if (profileUrl != null) {
             val builder = Picasso.Builder(requireContext())
@@ -169,7 +169,6 @@ class ChatHomeFragment() : Fragment(R.layout.chat_list), ListListener {
                     .subscribe()
             }
             chatEditText.setText("")
-            parentID = ""
         }
     }
 
