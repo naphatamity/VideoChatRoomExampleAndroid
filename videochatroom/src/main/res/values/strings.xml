@@ -1,0 +1,14 @@
+<resources>
+    <string name="app_name">VideoComment</string>
+    <string name="livechat_message_box_hint">Say something nice …</string>
+    <string name="report_title">Report Inappropriate Message</string>
+    <string name="report_description">Once you click OK, Our team will review the reported message and follow our application\'s community guidelines</string>
+    <string name="ok">OK</string>
+    <string name="cancel">Cancel</string>
+    <string name="message_deleted">Message Deleted</string>
+    <string name="love_emoji">&#9829;</string>
+    <string name="smile_emoji">&#128515;</string>
+    <string name="lol_face_emoji">&#128514;</string>
+    <string name="heart_eye_emoji">&#128525;</string>
+    <string name="fire_emoji">&#128293;</string>
+</resources>

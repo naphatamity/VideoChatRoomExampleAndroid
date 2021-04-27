@@ -1,0 +1,278 @@
+package com.videoment.videochatroom.chatfragment
+
+import android.app.AlertDialog
+import android.content.Context
+import android.os.Bundle
+import android.view.LayoutInflater
+import android.view.View
+import android.view.inputmethod.InputMethodManager
+import android.widget.*
+import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.fragment.app.Fragment
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import com.ekoapp.ekosdk.EkoClient
+import com.ekoapp.ekosdk.EkoMessageRepository
+import com.ekoapp.ekosdk.internal.api.http.EkoOkHttp
+import com.ekoapp.ekosdk.message.EkoMessage
+import com.ekoapp.ekosdk.message.flag.EkoMessageFlagger
+import com.squareup.picasso.OkHttp3Downloader
+import com.squareup.picasso.Picasso
+import com.videoment.videochatroom.ChatReaction
+import com.videoment.videochatroom.R
+import com.videoment.videochatroom.chatadapter.ChatAdapter
+import com.videoment.videochatroom.chatadapter.ListListener
+import io.reactivex.android.schedulers.AndroidSchedulers
+import io.reactivex.disposables.Disposable
+import io.reactivex.schedulers.Schedulers
+
+class ChatHomeFragment() : Fragment(R.layout.chat_list), ListListener {
+    private var parentID = ""
+    private var channelID = ""
+    lateinit var chatAdapter: ChatAdapter
+    private lateinit var messageQuery: Disposable
+    private lateinit var channelDisposable: Disposable
+
+    companion object {
+        const val CHANNEL_ID_ARG_KEY = "channelID"
+        const val HIDE_KEY_BOARD = 0
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        this.channelID = arguments?.getString(CHANNEL_ID_ARG_KEY) ?: ""
+
+        val channelRepository = EkoClient.newChannelRepository()
+        val messageRepository = EkoClient.newMessageRepository()
+        channelRepository.joinChannel(channelID)
+            .subscribe().run {
+                channelDisposable = this
+            }
+        if (!channelDisposable.isDisposed) {
+            initChatInput(messageRepository)
+            initChat(messageRepository)
+        }
+    }
+
+    private fun initChat(messageRepository: EkoMessageRepository) {
+        messageQuery = messageRepository.getMessageCollection(channelID)
+            .build()
+            .query()
+            .subscribeOn(Schedulers.io())
+            .observeOn((AndroidSchedulers.mainThread()))
+            .subscribe {
+                if (chatAdapter.itemCount < it.size) {
+                    chatAdapter.submitList(it).run {
+                        view?.findViewById<RecyclerView>(R.id.content_recycler)
+                            ?.scrollToPosition(it.size - 1)
+                    }
+                } else {
+                    requireView().findViewById<Button>(R.id.bottomBtn).visibility = View.VISIBLE
+                    chatAdapter.submitList(it)
+                }
+            }
+        initChatFragment()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        if (!messageQuery.isDisposed) {
+            messageQuery.dispose()
+        }
+        if (!channelDisposable.isDisposed) {
+            channelDisposable.dispose()
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        if (!messageQuery.isDisposed) {
+            messageQuery.dispose()
+        }
+        if (!channelDisposable.isDisposed) {
+            channelDisposable.dispose()
+        }
+    }
+
+    private fun initChatFragment() {
+        val recycler = requireView().findViewById<RecyclerView>(R.id.content_recycler)
+        recycler.apply {
+            layoutManager = LinearLayoutManager(activity, LinearLayoutManager.VERTICAL, false)
+            isNestedScrollingEnabled = false
+            chatAdapter = ChatAdapter(this@ChatHomeFragment)
+            adapter = chatAdapter
+            onFlingListener = null
+        }
+        addOnScroll(recycler)
+    }
+
+    private fun addOnScroll(recycler: RecyclerView) {
+
+        val bottomBtn = requireView().findViewById<Button>(R.id.bottomBtn)
+        bottomBtn.setOnClickListener {
+            recycler.scrollToPosition(chatAdapter.itemCount - 1)
+            bottomBtn.visibility = View.GONE
+        }
+
+        recycler.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                val visibleItemCount = (recycler.layoutManager as LinearLayoutManager).childCount
+                val totalItemCount = chatAdapter.itemCount
+                val positionView =
+                    (recycler.layoutManager as LinearLayoutManager).findFirstVisibleItemPosition()
+                if (visibleItemCount + positionView >= totalItemCount) {
+                    bottomBtn.visibility = View.GONE
+                } else if (visibleItemCount + positionView < totalItemCount) {
+                    bottomBtn.visibility = View.VISIBLE
+                }
+            }
+        })
+    }
+
+    private fun initChatInput(messageRepository: EkoMessageRepository) {
+        addProfileImage()
+        addBtnCickListener(messageRepository)
+    }
+
+    private fun addProfileImage() {
+        val profileImage = requireActivity().findViewById<ImageView>(R.id.profileDarkImageView)
+        val sharedPref = requireActivity().getPreferences(Context.MODE_PRIVATE) ?: return
+        val profileUrl = sharedPref.getString("profileImage", null)
+
+        if (profileUrl != null) {
+            val builder = Picasso.Builder(requireContext())
+            val ekoOkHttpClient = EkoOkHttp.newBuilder().build()
+            val picasso = builder.downloader(OkHttp3Downloader(ekoOkHttpClient)).build()
+
+            picasso.load(profileUrl)
+                .placeholder(R.drawable.amity_ic_avatar_placeholder)
+                .error(R.drawable.ic_default_profile).into(profileImage)
+        }
+    }
+
+    private fun addBtnCickListener(messageRepository: EkoMessageRepository) {
+        val chatEditText = requireActivity().findViewById<EditText>(R.id.messageDarkTextview)
+        val sendBtn = requireActivity().findViewById<ImageButton>(R.id.sendChatImageView)
+        sendBtn.setOnClickListener {
+            if (chatEditText.text.isNotBlank()) {
+                val imm =
+                    requireActivity().getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+                imm?.hideSoftInputFromWindow(
+                    view?.windowToken,
+                    HIDE_KEY_BOARD
+                )
+                messageRepository.createMessage(channelID)
+                    .with()
+                    .text(chatEditText.text.toString())
+                    .build()
+                    .send()
+                    .subscribe()
+            }
+            chatEditText.setText("")
+            parentID = ""
+        }
+    }
+
+    override fun onItemClick(chatItem: EkoMessage, position: Int, holder: View) {
+        val inflater = LayoutInflater.from(requireContext())
+        val view = inflater.inflate(R.layout.popup_window_message_reaction, null)
+
+        val popup = PopupWindow(
+            view,
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            false,
+        )
+        popup.isOutsideTouchable = true
+        val holderLayout = holder.findViewById<ConstraintLayout>(R.id.mainItemChatLinearLayout)
+        val xDimen = holderLayout.x.toInt()
+        val yDimen = holderLayout.bottom
+
+        popup.showAsDropDown(holder, xDimen * 2, -1 * yDimen)
+
+        initialLoveButton(chatItem, view)
+        initialSmileButton(chatItem, view)
+        initiallolButton(chatItem, view)
+        initialHeartEyeButton(chatItem, view)
+        initialFireButton(chatItem, view)
+    }
+
+    override fun onItemLongClick(chatItem: EkoMessage, position: Int, holder: View) {
+        onAlertDialog(chatItem, holder)
+    }
+
+    private fun initialLoveButton(chatItem: EkoMessage, view: View) {
+        val loveBtn = view.findViewById<TextView>(R.id.sendLoveEmoji)
+        loveBtn.setOnClickListener {
+            chatItem.react()
+                .addReaction(ChatReaction.LOVE)
+                .subscribe()
+            view.visibility = View.GONE
+        }
+    }
+
+    private fun initialSmileButton(chatItem: EkoMessage, view: View) {
+        val smileBtn = view.findViewById<TextView>(R.id.sendSmileEmoji)
+        smileBtn.setOnClickListener {
+            chatItem.react()
+                .addReaction(ChatReaction.SMILE)
+                .subscribe()
+            view.visibility = View.GONE
+        }
+    }
+
+    private fun initiallolButton(chatItem: EkoMessage, view: View) {
+        val lolBtn = view.findViewById<TextView>(R.id.sendlolEmoji)
+        lolBtn.setOnClickListener {
+            chatItem.react()
+                .addReaction(ChatReaction.LOL)
+                .subscribe()
+            view.visibility = View.GONE
+        }
+    }
+
+    private fun initialHeartEyeButton(chatItem: EkoMessage, view: View) {
+        val heartEyeBtn = view.findViewById<TextView>(R.id.sendHeartEyeEmoji)
+        heartEyeBtn.setOnClickListener {
+            chatItem.react()
+                .addReaction(ChatReaction.HEARTEYE)
+                .subscribe()
+            view.visibility = View.GONE
+        }
+    }
+
+    private fun initialFireButton(chatItem: EkoMessage, view: View) {
+        val fireBtn = view.findViewById<TextView>(R.id.sendFiremoji)
+        fireBtn.setOnClickListener {
+            chatItem.react()
+                .addReaction(ChatReaction.FIRE)
+                .subscribe()
+            view.visibility = View.GONE
+        }
+    }
+
+    operator fun invoke(): Fragment {
+        return this
+    }
+
+    private fun onAlertDialog(chatItem: EkoMessage, view: View) {
+        val builder = AlertDialog.Builder(view.context, R.style.AlertDialogCustom)
+        builder.setTitle((resources.getString(R.string.report_title)))
+        builder.setMessage((resources.getString(R.string.report_description)))
+        builder.setPositiveButton(
+            resources.getString(R.string.ok)
+        ) { dialog, id ->
+            val flagger: EkoMessageFlagger = chatItem.report()
+            flagger.flag()
+                .doOnComplete { dialog.dismiss() }
+                .subscribe()
+        }
+        builder.setNegativeButton(
+            resources.getString(R.string.cancel)
+        ) { dialog, id ->
+            dialog.dismiss()
+        }
+        builder.show()
+    }
+
+}

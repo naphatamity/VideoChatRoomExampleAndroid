@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/bottomBtn"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center|bottom"
+        android:backgroundTint="@android:color/white"
+        android:text="Scroll down"
+        android:textColor="@color/chatmsg"
+        android:textSize="12sp"
+        app:icon="@drawable/amity_ic_arrow_down"
+        app:iconTint="@color/chatmsg" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/content_recycler"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:keepScreenOn="false"
+        android:padding="5dp" />
+
+
+</FrameLayout>
