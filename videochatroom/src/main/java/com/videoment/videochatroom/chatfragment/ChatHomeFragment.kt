@@ -27,7 +27,6 @@ import io.reactivex.disposables.Disposable
 import io.reactivex.schedulers.Schedulers
 
 class ChatHomeFragment() : Fragment(R.layout.chat_list), ListListener {
-    private var parentID = ""
     private var channelID = ""
     lateinit var chatAdapter: ChatAdapter
     private lateinit var messageQuery: Disposable
@@ -41,6 +40,7 @@ class ChatHomeFragment() : Fragment(R.layout.chat_list), ListListener {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         this.channelID = arguments?.getString(CHANNEL_ID_ARG_KEY) ?: ""
+        initChatFragment()
 
         val channelRepository = EkoClient.newChannelRepository()
         val messageRepository = EkoClient.newMessageRepository()
@@ -63,15 +63,14 @@ class ChatHomeFragment() : Fragment(R.layout.chat_list), ListListener {
             .subscribe {
                 if (chatAdapter.itemCount < it.size) {
                     chatAdapter.submitList(it).run {
-                        view?.findViewById<RecyclerView>(R.id.content_recycler)
-                            ?.scrollToPosition(it.size - 1)
+                        requireView().findViewById<RecyclerView>(R.id.content_recycler)
+                            .scrollToPosition(it.size - 1)
+                        requireView().findViewById<Button>(R.id.bottomBtn).visibility = View.VISIBLE
                     }
                 } else {
-                    requireView().findViewById<Button>(R.id.bottomBtn).visibility = View.VISIBLE
                     chatAdapter.submitList(it)
                 }
             }
-        initChatFragment()
     }
 
     override fun onPause() {
@@ -115,15 +114,25 @@ class ChatHomeFragment() : Fragment(R.layout.chat_list), ListListener {
         }
 
         recycler.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            var scroll_state = 0
+
+            override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
+                super.onScrollStateChanged(recyclerView, newState)
+                scroll_state = newState
+            }
+
             override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
-                val visibleItemCount = (recycler.layoutManager as LinearLayoutManager).childCount
-                val totalItemCount = chatAdapter.itemCount
-                val positionView =
-                    (recycler.layoutManager as LinearLayoutManager).findFirstVisibleItemPosition()
-                if (visibleItemCount + positionView >= totalItemCount) {
-                    bottomBtn.visibility = View.GONE
-                } else if (visibleItemCount + positionView < totalItemCount) {
-                    bottomBtn.visibility = View.VISIBLE
+                if (scroll_state > 0) {
+                    val visibleItemCount =
+                        (recycler.layoutManager as LinearLayoutManager).childCount
+                    val totalItemCount = chatAdapter.itemCount
+                    val positionView =
+                        (recycler.layoutManager as LinearLayoutManager).findFirstVisibleItemPosition()
+                    if (visibleItemCount + positionView >= totalItemCount) {
+                        bottomBtn.visibility = View.GONE
+                    } else if (visibleItemCount + positionView < totalItemCount) {
+                        bottomBtn.visibility = View.VISIBLE
+                    }
                 }
             }
         })
@@ -169,7 +178,6 @@ class ChatHomeFragment() : Fragment(R.layout.chat_list), ListListener {
                     .subscribe()
             }
             chatEditText.setText("")
-            parentID = ""
         }
     }
 

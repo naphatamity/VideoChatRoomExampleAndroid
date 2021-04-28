@@ -14,7 +14,8 @@
         android:textColor="@color/chatmsg"
         android:textSize="12sp"
         app:icon="@drawable/amity_ic_arrow_down"
-        app:iconTint="@color/chatmsg" />
+        app:iconTint="@color/chatmsg"
+        android:visibility="gone" />
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/content_recycler"
