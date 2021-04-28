@@ -34,6 +34,7 @@ class ChatHomeFragment() : Fragment(R.layout.chat_list), ListListener {
 
     companion object {
         const val CHANNEL_ID_ARG_KEY = "channelID"
+        const val PROFILE_IMAGE = "profileImage"
         const val HIDE_KEY_BOARD = 0
     }
 
@@ -146,7 +147,7 @@ class ChatHomeFragment() : Fragment(R.layout.chat_list), ListListener {
     private fun addProfileImage() {
         val profileImage = requireActivity().findViewById<ImageView>(R.id.profileDarkImageView)
         val sharedPref = requireActivity().getPreferences(Context.MODE_PRIVATE) ?: return
-        val profileUrl = sharedPref.getString("profileImage", null)
+        val profileUrl = sharedPref.getString(PROFILE_IMAGE, null)
 
         if (profileUrl != null) {
             val builder = Picasso.Builder(requireContext())

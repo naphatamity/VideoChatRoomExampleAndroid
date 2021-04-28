@@ -24,7 +24,7 @@ class MainActivity : AppCompatActivity() {
         ii.putExtra(VIDEO_NAME, "videoName")
         ii.putExtra(VIDEO_URL, "videoUrl")
         startActivity(ii)
-        this.finish();
+        this.finish()
 
     }
 }
