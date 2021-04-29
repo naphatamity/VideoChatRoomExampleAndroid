@@ -41,6 +41,7 @@ class ChatViewHolder(itemsView: View) : RecyclerView.ViewHolder(itemsView) {
 
         val name = item.getUser()?.getDisplayName()
         view.findViewById<TextView>(R.id.usernameMessageAppTextView).text = name
+
         when (val description = item.getData()) {
             is EkoMessage.Data.TEXT -> {
                 if (!item.isDeleted()) {

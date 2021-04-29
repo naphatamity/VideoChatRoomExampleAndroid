@@ -16,15 +16,14 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        val ii = Intent(this, com.videoment.videochatroom.MainActivity::class.java)
-        ii.putExtra(API_KEY, "apiKey")
-        ii.putExtra(CHANNEL_ID, "channelID")
-        ii.putExtra(USER_ID, "userId")
-        ii.putExtra(USER_NAME, "userName")
-        ii.putExtra(VIDEO_NAME, "videoName")
-        ii.putExtra(VIDEO_URL, "videoUrl")
-        startActivity(ii)
+        val videoChatIntent = Intent(this, com.videoment.videochatroom.MainActivity::class.java)
+        videoChatIntent.putExtra(API_KEY, "apiKey")
+        videoChatIntent.putExtra(CHANNEL_ID, "channelID")
+        videoChatIntent.putExtra(USER_ID, "userId")
+        videoChatIntent.putExtra(USER_NAME, "userName")
+        videoChatIntent.putExtra(VIDEO_NAME, "videoName")
+        videoChatIntent.putExtra(VIDEO_URL, "videoUrl")
+        startActivity(videoChatIntent)
         this.finish()
-
     }
 }

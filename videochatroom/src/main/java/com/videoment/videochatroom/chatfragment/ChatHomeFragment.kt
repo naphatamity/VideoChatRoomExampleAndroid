@@ -3,12 +3,16 @@ package com.videoment.videochatroom.chatfragment
 import android.app.AlertDialog
 import android.content.Context
 import android.os.Bundle
+import androidx.lifecycle.LiveDataReactiveStreams
 import android.view.LayoutInflater
 import android.view.View
 import android.view.inputmethod.InputMethodManager
 import android.widget.*
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.Observer
+import androidx.paging.PagedList
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.ekoapp.ekosdk.EkoClient
@@ -28,13 +32,12 @@ import io.reactivex.schedulers.Schedulers
 
 class ChatHomeFragment() : Fragment(R.layout.chat_list), ListListener {
     private var channelID = ""
-    lateinit var chatAdapter: ChatAdapter
-    private lateinit var messageQuery: Disposable
+    var chatAdapter: ChatAdapter? = null
+    private lateinit var messageQuery: LiveData<PagedList<EkoMessage>>
     private lateinit var channelDisposable: Disposable
 
     companion object {
         const val CHANNEL_ID_ARG_KEY = "channelID"
-        const val PROFILE_IMAGE = "profileImage"
         const val HIDE_KEY_BOARD = 0
     }
 
@@ -56,29 +59,34 @@ class ChatHomeFragment() : Fragment(R.layout.chat_list), ListListener {
     }
 
     private fun initChat(messageRepository: EkoMessageRepository) {
-        messageQuery = messageRepository.getMessageCollection(channelID)
-            .build()
-            .query()
-            .subscribeOn(Schedulers.io())
-            .observeOn((AndroidSchedulers.mainThread()))
-            .subscribe {
-                if (chatAdapter.itemCount < it.size) {
-                    chatAdapter.submitList(it).run {
-                        requireView().findViewById<RecyclerView>(R.id.content_recycler)
-                            .scrollToPosition(it.size - 1)
-                        requireView().findViewById<Button>(R.id.bottomBtn).visibility = View.VISIBLE
-                    }
-                } else {
-                    chatAdapter.submitList(it)
+        messageQuery = getMessageCollection(messageRepository)
+        messageQuery.observe(requireActivity(), Observer {
+            if (chatAdapter?.itemCount!! < it.size) {
+                chatAdapter?.submitList(it).run {
+                    requireView().findViewById<RecyclerView>(R.id.content_recycler)
+                        .scrollToPosition(it.size - 1)
+                    requireView().findViewById<Button>(R.id.bottomBtn).visibility = View.VISIBLE
                 }
+            } else {
+                chatAdapter?.submitList(it)
             }
+        })
     }
+
+    private fun getMessageCollection(messageRepository: EkoMessageRepository): LiveData<PagedList<EkoMessage>> {
+        return LiveDataReactiveStreams.fromPublisher(
+            messageRepository.getMessageCollection(channelID)
+                .build()
+                .query()
+                .subscribeOn(Schedulers.io())
+                .observeOn((AndroidSchedulers.mainThread()))
+        )
+    }
+
 
     override fun onPause() {
         super.onPause()
-        if (!messageQuery.isDisposed) {
-            messageQuery.dispose()
-        }
+        messageQuery.removeObservers(this)
         if (!channelDisposable.isDisposed) {
             channelDisposable.dispose()
         }
@@ -86,9 +94,7 @@ class ChatHomeFragment() : Fragment(R.layout.chat_list), ListListener {
 
     override fun onDestroy() {
         super.onDestroy()
-        if (!messageQuery.isDisposed) {
-            messageQuery.dispose()
-        }
+        messageQuery.removeObservers(this)
         if (!channelDisposable.isDisposed) {
             channelDisposable.dispose()
         }
@@ -96,10 +102,10 @@ class ChatHomeFragment() : Fragment(R.layout.chat_list), ListListener {
 
     private fun initChatFragment() {
         val recycler = requireView().findViewById<RecyclerView>(R.id.content_recycler)
+        chatAdapter = ChatAdapter(this@ChatHomeFragment)
         recycler.apply {
             layoutManager = LinearLayoutManager(activity, LinearLayoutManager.VERTICAL, false)
             isNestedScrollingEnabled = false
-            chatAdapter = ChatAdapter(this@ChatHomeFragment)
             adapter = chatAdapter
             onFlingListener = null
         }
@@ -107,12 +113,21 @@ class ChatHomeFragment() : Fragment(R.layout.chat_list), ListListener {
     }
 
     private fun addOnScroll(recycler: RecyclerView) {
-
         val bottomBtn = requireView().findViewById<Button>(R.id.bottomBtn)
         bottomBtn.setOnClickListener {
-            recycler.scrollToPosition(chatAdapter.itemCount - 1)
+            chatAdapter?.itemCount?.minus(1)?.let { it1 -> recycler.scrollToPosition(it1) }
             bottomBtn.visibility = View.GONE
         }
+
+        chatAdapter?.registerAdapterDataObserver(object : RecyclerView.AdapterDataObserver() {
+            override fun onItemRangeInserted(positionStart: Int, itemCount: Int) {
+                super.onItemRangeInserted(positionStart, itemCount)
+                val lastPosition = chatAdapter!!.itemCount - 1
+                if (positionStart == lastPosition) {
+                    recycler.scrollToPosition(lastPosition)
+                }
+            }
+        })
 
         recycler.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             var scroll_state = 0
@@ -123,16 +138,19 @@ class ChatHomeFragment() : Fragment(R.layout.chat_list), ListListener {
             }
 
             override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
-                if (scroll_state > 0) {
+                if (scroll_state > 0 && chatAdapter != null) {
                     val visibleItemCount =
                         (recycler.layoutManager as LinearLayoutManager).childCount
-                    val totalItemCount = chatAdapter.itemCount
                     val positionView =
                         (recycler.layoutManager as LinearLayoutManager).findFirstVisibleItemPosition()
-                    if (visibleItemCount + positionView >= totalItemCount) {
-                        bottomBtn.visibility = View.GONE
-                    } else if (visibleItemCount + positionView < totalItemCount) {
-                        bottomBtn.visibility = View.VISIBLE
+                    chatAdapter?.itemCount?.minus(visibleItemCount + positionView).let {
+                        if (it != null) {
+                            if (it > 0) {
+                                bottomBtn.visibility = View.VISIBLE
+                            } else {
+                                bottomBtn.visibility = View.GONE
+                            }
+                        }
                     }
                 }
             }
@@ -147,7 +165,7 @@ class ChatHomeFragment() : Fragment(R.layout.chat_list), ListListener {
     private fun addProfileImage() {
         val profileImage = requireActivity().findViewById<ImageView>(R.id.profileDarkImageView)
         val sharedPref = requireActivity().getPreferences(Context.MODE_PRIVATE) ?: return
-        val profileUrl = sharedPref.getString(PROFILE_IMAGE, null)
+        val profileUrl = sharedPref.getString("profileImage", null)
 
         if (profileUrl != null) {
             val builder = Picasso.Builder(requireContext())
@@ -201,7 +219,7 @@ class ChatHomeFragment() : Fragment(R.layout.chat_list), ListListener {
 
         initialLoveButton(chatItem, view)
         initialSmileButton(chatItem, view)
-        initiallolButton(chatItem, view)
+        initialButton(chatItem, view)
         initialHeartEyeButton(chatItem, view)
         initialFireButton(chatItem, view)
     }
@@ -230,7 +248,7 @@ class ChatHomeFragment() : Fragment(R.layout.chat_list), ListListener {
         }
     }
 
-    private fun initiallolButton(chatItem: EkoMessage, view: View) {
+    private fun initialButton(chatItem: EkoMessage, view: View) {
         val lolBtn = view.findViewById<TextView>(R.id.sendlolEmoji)
         lolBtn.setOnClickListener {
             chatItem.react()
